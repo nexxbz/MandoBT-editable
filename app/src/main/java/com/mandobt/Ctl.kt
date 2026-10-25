@@ -22,15 +22,15 @@ object Templates {
         val sx = if (ps) .34f else .17f
         val sy = if (ps) .78f else .50f
         return mutableListOf(
-            Ctl('r', 6, .12f, .09f, .10f, sh[2]), Ctl('r', 4, .12f, .25f, .085f, sh[0]),
-            Ctl('r', 7, .88f, .09f, .10f, sh[3]), Ctl('r', 5, .88f, .25f, .085f, sh[1]),
+            Ctl('r', 6, .12f, .09f, .10f, sh[2]), Ctl('r', 4, .12f, .22f, .085f, sh[0]),
+            Ctl('r', 7, .88f, .09f, .10f, sh[3]), Ctl('r', 5, .88f, .22f, .085f, sh[1]),
             Ctl('r', 8, .40f, .30f, .07f, sel), Ctl('r', 9, .60f, .30f, .07f, st),
             Ctl('b', 12, .50f, .50f, .06f, home),
             Ctl('s', 0, sx, sy, .17f, ""), Ctl('s', 1, .66f, .78f, .17f, ""),
             Ctl('d', 1, dx, dy - .12f, .07f, "▲"), Ctl('d', 2, dx + .06f, dy, .07f, "▶"),
             Ctl('d', 4, dx, dy + .12f, .07f, "▼"), Ctl('d', 8, dx - .06f, dy, .07f, "◀"),
-            Ctl('b', 0, .83f, .64f, .075f, face[0]), Ctl('b', 1, .91f, .50f, .075f, face[1]),
-            Ctl('b', 2, .75f, .50f, .075f, face[2]), Ctl('b', 3, .83f, .36f, .075f, face[3]),
+            Ctl('b', 0, .83f, .71f, .075f, face[0]), Ctl('b', 1, .91f, .57f, .075f, face[1]),
+            Ctl('b', 2, .75f, .57f, .075f, face[2]), Ctl('b', 3, .83f, .43f, .075f, face[3]),
             Ctl('b', 10, .05f, .88f, .045f, "L3"), Ctl('b', 11, .95f, .88f, .045f, "R3")
         )
     }

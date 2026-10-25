@@ -15,6 +15,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.HapticFeedbackConstants
+import android.view.Gravity
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.widget.*
 
 @SuppressLint("MissingPermission", "ClickableViewAccessibility")
@@ -26,7 +30,6 @@ class MainActivity : Activity() {
     private lateinit var touch: TouchPad
     private lateinit var kb: ScrollView
     private lateinit var editBar: LinearLayout
-    private lateinit var editBtn: Button
     private var cur = "xbox"
     private var mods = 0
     private val keysDown = mutableListOf<Int>()
@@ -38,71 +41,83 @@ class MainActivity : Activity() {
         text = t; isAllCaps = false; setOnClickListener { f() }
     }
 
+    private fun small(t: String, f: () -> Unit) = Button(this).apply {
+        text = t; isAllCaps = false; textSize = 12f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
+        setPadding(dp(10), 0, dp(10), 0); alpha = .9f; setOnClickListener { f() }
+    }
+
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = getSharedPreferences("mando", MODE_PRIVATE)
         cur = prefs.getString("profile", "xbox") ?: "xbox"
         status = TextView(this).apply {
-            setTextColor(0xFFB8C0D0.toInt()); textSize = 13f; setPadding(dp(10), dp(4), dp(10), 0); text = "Iniciando…"
+            setTextColor(0xFFB8C0D0.toInt()); textSize = 12f; setPadding(dp(8), 0, dp(8), 0); text = "Iniciando…"; maxLines = 1
         }
         hid = HidController(this) { s -> runOnUiThread { status.text = s } }
         pad = PadView(this)
         touch = TouchPad(this)
         pad.onReport = { hid.send(1, it) }
         touch.onMouse = { bt, dx, dy, w -> sendMouse(bt, dx, dy, w) }
+        loadProfile(cur)
 
-        val spin = Spinner(this)
-        spin.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, Templates.names.map { it.second })
-        spin.setSelection(Templates.names.indexOfFirst { it.first == cur }.coerceAtLeast(0))
-        spin.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                loadProfile(Templates.names[pos].first)
-                prefs.edit().putString("profile", cur).apply()
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        val menuBtn = Button(this).apply {
+            text = "☰"; textSize = 20f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
+            setPadding(0, 0, 0, 0); alpha = .85f; setOnClickListener { menu() }
         }
-        editBtn = btn("Editar") { toggleEdit() }
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(btn("Visible") { visible() })
-            addView(btn("Conectar") { connectDialog() })
-            addView(btn("Ajustes") { settings() })
-            addView(btn("Mando") { show(0) })
-            addView(btn("Ratón") { show(1) })
-            addView(btn("Teclado") { show(2) })
-            addView(spin)
-            addView(editBtn)
-        }
-        val bar = HorizontalScrollView(this).apply { addView(row) }
-
         editBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; visibility = View.GONE
-            addView(btn("Más grande") { pad.selected?.let { it.size = (it.size * 1.1f).coerceAtMost(.35f); pad.invalidate() } })
-            addView(btn("Más pequeño") { pad.selected?.let { it.size = (it.size / 1.1f).coerceAtLeast(.03f); pad.invalidate() } })
-            addView(btn("Guardar") { prefs.edit().putString("layout_$cur", pad.toJson()).apply(); toast("Distribución guardada") })
-            addView(btn("Restablecer") {
+            addView(small("Más grande") { pad.selected?.let { it.size = (it.size * 1.1f).coerceAtMost(.35f); pad.invalidate() } }, LinearLayout.LayoutParams(-2, dp(40)))
+            addView(small("Más pequeño") { pad.selected?.let { it.size = (it.size / 1.1f).coerceAtLeast(.03f); pad.invalidate() } }, LinearLayout.LayoutParams(-2, dp(40)))
+            addView(small("Guardar") { prefs.edit().putString("layout_$cur", pad.toJson()).apply(); toast("Distribución guardada") }, LinearLayout.LayoutParams(-2, dp(40)))
+            addView(small("Restablecer") {
                 prefs.edit().remove("layout_$cur").apply()
                 pad.ctls = Templates.build(cur); pad.selected = null; pad.invalidate()
-            })
+            }, LinearLayout.LayoutParams(-2, dp(40)))
+            addView(small("Listo") { toggleEdit() }, LinearLayout.LayoutParams(-2, dp(40)))
+        }
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(menuBtn, LinearLayout.LayoutParams(dp(48), dp(40)))
+            addView(status)
+            addView(editBar)
         }
 
         kb = ScrollView(this).apply { addView(buildKeyboard()); visibility = View.GONE }
         touch.visibility = View.GONE
-        val content = FrameLayout(this).apply {
-            val mp = ViewGroup.LayoutParams.MATCH_PARENT
+        val mp = ViewGroup.LayoutParams.MATCH_PARENT
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(0xFF12151C.toInt())
             addView(pad, FrameLayout.LayoutParams(mp, mp))
             addView(touch, FrameLayout.LayoutParams(mp, mp))
             addView(kb, FrameLayout.LayoutParams(mp, mp))
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFF12151C.toInt())
-            addView(status); addView(bar); addView(editBar)
-            addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(topRow, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(4) })
         }
         setContentView(root)
+        immersive()
         applyPrefs()
         ensurePerm()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun immersive() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+            window.insetsController?.let {
+                it.hide(WindowInsets.Type.systemBars())
+                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) immersive()
     }
 
     override fun onDestroy() { hid.stop(); super.onDestroy() }
@@ -122,14 +137,39 @@ class MainActivity : Activity() {
         pad.visibility = if (m == 0) View.VISIBLE else View.GONE
         touch.visibility = if (m == 1) View.VISIBLE else View.GONE
         kb.visibility = if (m == 2) View.VISIBLE else View.GONE
-        editBtn.visibility = if (m == 0) View.VISIBLE else View.GONE
         if (m != 0 && pad.edit) toggleEdit()
     }
 
     private fun toggleEdit() {
         pad.setEdit(!pad.edit)
-        editBtn.text = if (pad.edit) "Listo" else "Editar"
         editBar.visibility = if (pad.edit) View.VISIBLE else View.GONE
+        if (pad.edit) toast("Arrastra los botones. Toca uno para cambiar su tamaño.")
+    }
+
+    private fun menu() {
+        val consola = Templates.names.first { it.first == cur }.second
+        val items = arrayOf(
+            "Mando", "Ratón", "Teclado", "Consola: $consola", "Sensibilidad y ajustes",
+            if (pad.edit) "Terminar de editar" else "Editar botones",
+            "Hacerse visible para emparejar", "Conectar a un equipo"
+        )
+        AlertDialog.Builder(this).setTitle(status.text.toString()).setItems(items) { _, i ->
+            when (i) {
+                0 -> show(0); 1 -> show(1); 2 -> show(2)
+                3 -> profileDialog(); 4 -> settings()
+                5 -> { show(0); toggleEdit() }
+                6 -> visible(); 7 -> connectDialog()
+            }
+        }.show()
+    }
+
+    private fun profileDialog() {
+        val n = Templates.names
+        AlertDialog.Builder(this).setTitle("Consola").setItems(n.map { it.second }.toTypedArray()) { _, i ->
+            loadProfile(n[i].first)
+            prefs.edit().putString("profile", cur).apply()
+            show(0)
+        }.show()
     }
 
     private fun loadProfile(key: String) {
@@ -223,7 +263,7 @@ class MainActivity : Activity() {
     }
 
     private fun buildKeyboard(): LinearLayout {
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(4)) }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(52), dp(4), dp(4)) }
         for (r in rows) {
             val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             for (k in r) {
