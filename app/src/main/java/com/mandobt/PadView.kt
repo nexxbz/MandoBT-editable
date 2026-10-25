@@ -23,7 +23,7 @@ class PadView(ctx: Context) : View(ctx) {
     var onReport: ((ByteArray) -> Unit)? = null
 
     private val down = HashMap<Int, Ctl>()
-    private var lastRep = ByteArray(7)
+    private var lastRep = ByteArray(9)
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
 
     // id del botón en la pantalla -> bit del reporte HID
@@ -124,8 +124,14 @@ class PadView(ctx: Context) : View(ctx) {
         var b = 0
         var mask = 0
         val ax = IntArray(4)
+        var gas = 0
+        var brk = 0
         if (!edit) for (c in down.values) when (c.kind) {
-            'b', 'r' -> b = b or (1 shl bitOf(c.id))
+            'b', 'r' -> {
+                b = b or (1 shl bitOf(c.id))
+                if (c.id == 7) gas = 255
+                if (c.id == 6) brk = 255
+            }
             'd' -> mask = mask or c.id
             's' -> {
                 val m = hypot(c.vx, c.vy)
@@ -138,7 +144,8 @@ class PadView(ctx: Context) : View(ctx) {
         }
         val hat = when (mask) { 1 -> 1; 3 -> 2; 2 -> 3; 6 -> 4; 4 -> 5; 12 -> 6; 8 -> 7; 9 -> 8; else -> 0 }
         val r = byteArrayOf(b.toByte(), (b shr 8).toByte(), hat.toByte(),
-            ax[0].toByte(), ax[1].toByte(), ax[2].toByte(), ax[3].toByte())
+            ax[0].toByte(), ax[1].toByte(), ax[2].toByte(), ax[3].toByte(),
+            gas.toByte(), brk.toByte())
         if (!r.contentEquals(lastRep)) { lastRep = r; onReport?.invoke(r) }
     }
 

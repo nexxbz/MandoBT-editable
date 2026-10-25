@@ -31,6 +31,7 @@ class MainActivity : Activity() {
     private lateinit var kb: ScrollView
     private lateinit var editBar: LinearLayout
     private var cur = "xbox"
+    private var activo: String? = null
     private var mods = 0
     private val keysDown = mutableListOf<Int>()
     private val modBtns = mutableMapOf<Int, Button>()
@@ -60,6 +61,8 @@ class MainActivity : Activity() {
         pad.onReport = { hid.send(1, it) }
         touch.onMouse = { bt, dx, dy, w -> sendMouse(bt, dx, dy, w) }
         loadProfile(cur)
+        activo = prefs.getString("perfil_activo", null)
+        activo?.let { if (!cargarPerfil(it)) activo = null }
 
         val menuBtn = Button(this).apply {
             text = "☰"; textSize = 20f; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
@@ -69,7 +72,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL; visibility = View.GONE
             addView(small("Más grande") { pad.selected?.let { it.size = (it.size * 1.1f).coerceAtMost(.35f); pad.invalidate() } }, LinearLayout.LayoutParams(-2, dp(40)))
             addView(small("Más pequeño") { pad.selected?.let { it.size = (it.size / 1.1f).coerceAtLeast(.03f); pad.invalidate() } }, LinearLayout.LayoutParams(-2, dp(40)))
-            addView(small("Guardar") { prefs.edit().putString("layout_$cur", pad.toJson()).apply(); toast("Distribución guardada") }, LinearLayout.LayoutParams(-2, dp(40)))
+            addView(small("Guardar") { guardarActual() }, LinearLayout.LayoutParams(-2, dp(40)))
             addView(small("Restablecer") {
                 prefs.edit().remove("layout_$cur").apply()
                 pad.ctls = Templates.build(cur); pad.selected = null; pad.invalidate()
@@ -149,16 +152,80 @@ class MainActivity : Activity() {
     private fun menu() {
         val consola = Templates.names.first { it.first == cur }.second
         val items = arrayOf(
-            "Mando", "Ratón", "Teclado", "Consola: $consola", "Sensibilidad y ajustes",
+            "Mando", "Ratón", "Teclado", "Consola: $consola",
+            "Mis perfiles" + (activo?.let { " ($it)" } ?: ""),
+            "Sensibilidad y ajustes",
             if (pad.edit) "Terminar de editar" else "Editar botones",
             "Hacerse visible para emparejar", "Conectar a un equipo"
         )
         AlertDialog.Builder(this).setTitle(status.text.toString()).setItems(items) { _, i ->
             when (i) {
                 0 -> show(0); 1 -> show(1); 2 -> show(2)
-                3 -> profileDialog(); 4 -> settings()
-                5 -> { show(0); toggleEdit() }
-                6 -> visible(); 7 -> connectDialog()
+                3 -> profileDialog(); 4 -> perfilesDialog(); 5 -> settings()
+                6 -> { show(0); toggleEdit() }
+                7 -> visible(); 8 -> connectDialog()
+            }
+        }.show()
+    }
+
+    // ---------------- Perfiles de distribución ----------------
+    private fun perfiles(): MutableList<String> {
+        val a = org.json.JSONArray(prefs.getString("perfiles", "[]") ?: "[]")
+        return MutableList(a.length()) { a.getString(it) }
+    }
+
+    private fun guardarPerfil(name: String) {
+        val l = perfiles()
+        if (name !in l) l.add(name)
+        prefs.edit().putString("perfiles", org.json.JSONArray(l).toString())
+            .putString("pf_$name", pad.toJson()).putString("perfil_activo", name).apply()
+        activo = name
+        toast("Perfil «$name» guardado")
+    }
+
+    private fun cargarPerfil(name: String): Boolean {
+        val s = prefs.getString("pf_$name", null) ?: return false
+        return try {
+            pad.load(s); activo = name
+            prefs.edit().putString("perfil_activo", name).apply(); true
+        } catch (_: Exception) { false }
+    }
+
+    private fun borrarPerfil(name: String) {
+        val l = perfiles(); l.remove(name)
+        prefs.edit().putString("perfiles", org.json.JSONArray(l).toString()).remove("pf_$name").apply()
+        if (activo == name) { activo = null; prefs.edit().remove("perfil_activo").apply() }
+    }
+
+    private fun pedirNombre(f: (String) -> Unit) {
+        val et = EditText(this).apply { hint = "Nombre del perfil"; setSingleLine(true) }
+        AlertDialog.Builder(this).setTitle("Guardar como perfil").setView(et)
+            .setPositiveButton("Guardar") { _, _ ->
+                val n = et.text.toString().trim()
+                if (n.isNotEmpty()) f(n) else toast("Escribe un nombre")
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun guardarActual() {
+        val a = activo
+        if (a != null) guardarPerfil(a) else pedirNombre { guardarPerfil(it) }
+    }
+
+    private fun perfilesDialog() {
+        val l = perfiles()
+        val items = (l.map { if (it == activo) "✓ $it" else it } + "＋ Guardar la distribución actual como perfil nuevo").toTypedArray()
+        AlertDialog.Builder(this).setTitle("Mis perfiles").setItems(items) { _, i ->
+            if (i == l.size) pedirNombre { guardarPerfil(it) }
+            else {
+                val n = l[i]
+                AlertDialog.Builder(this).setTitle(n)
+                    .setItems(arrayOf("Usar este perfil", "Guardar la distribución actual aquí", "Borrar perfil")) { _, j ->
+                        when (j) {
+                            0 -> if (cargarPerfil(n)) show(0) else toast("No se pudo cargar")
+                            1 -> guardarPerfil(n)
+                            2 -> { borrarPerfil(n); toast("Perfil borrado") }
+                        }
+                    }.show()
             }
         }.show()
     }
@@ -167,6 +234,8 @@ class MainActivity : Activity() {
         val n = Templates.names
         AlertDialog.Builder(this).setTitle("Consola").setItems(n.map { it.second }.toTypedArray()) { _, i ->
             loadProfile(n[i].first)
+            activo = null
+            prefs.edit().remove("perfil_activo").apply()
             prefs.edit().putString("profile", cur).apply()
             show(0)
         }.show()
