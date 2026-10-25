@@ -31,7 +31,8 @@ object Templates {
             Ctl('d', 4, dx, dy + .12f, .07f, "▼"), Ctl('d', 8, dx - .06f, dy, .07f, "◀"),
             Ctl('b', 0, .83f, .71f, .075f, face[0]), Ctl('b', 1, .91f, .57f, .075f, face[1]),
             Ctl('b', 2, .75f, .57f, .075f, face[2]), Ctl('b', 3, .83f, .43f, .075f, face[3]),
-            Ctl('b', 10, .05f, .88f, .045f, "L3"), Ctl('b', 11, .95f, .88f, .045f, "R3")
+            Ctl('b', 10, .05f, .88f, .045f, "L3"), Ctl('b', 11, .95f, .88f, .045f, "R3"),
+            Ctl('g', 20, .50f, .80f, .05f, "GIRO")
         )
     }
 }

@@ -19,12 +19,19 @@ import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.view.Surface
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.provider.Settings
 import android.widget.*
 
 @SuppressLint("MissingPermission", "ClickableViewAccessibility")
 class MainActivity : Activity() {
     private lateinit var prefs: SharedPreferences
-    private lateinit var hid: HidController
+    private val hid: HidController? get() = HidHolder.hid
+    private var sensorMgr: SensorManager? = null
     private lateinit var status: TextView
     private lateinit var pad: PadView
     private lateinit var touch: TouchPad
@@ -66,13 +73,15 @@ class MainActivity : Activity() {
         prefs = getSharedPreferences("mando", MODE_PRIVATE)
         cur = prefs.getString("profile", "xbox") ?: "xbox"
         status = TextView(this).apply {
-            setTextColor(0xFFB8C0D0.toInt()); textSize = 12f; setPadding(dp(8), 0, dp(8), 0); text = "Iniciando…"; maxLines = 1
+            setTextColor(0xFFB8C0D0.toInt()); textSize = 12f; setPadding(dp(8), 0, dp(8), 0); text = HidHolder.lastStatus; maxLines = 1
         }
-        hid = HidController(this) { s -> runOnUiThread { status.text = s } }
+        HidHolder.onStatus = { s -> runOnUiThread { status.text = s } }
+        sensorMgr = getSystemService(SensorManager::class.java)
         pad = PadView(this)
         touch = TouchPad(this)
         touch2 = TouchPad(this)
-        pad.onReport = { hid.send(1, it) }
+        pad.onReport = { hid?.send(1, it) }
+        pad.onToggleGyro = { setGyro(!pad.gyroOn) }
         touch.onMouse = { bt, dx, dy, w -> sendMouse(bt, dx, dy, w) }
         touch2.onMouse = touch.onMouse
         loadProfile(cur)
@@ -120,6 +129,18 @@ class MainActivity : Activity() {
         immersive()
         applyPrefs()
         ensurePerm()
+        if (prefs.getBoolean("gyro_on", false)) setGyro(true)
+
+        val splash = ImageView(this).apply {
+            setImageResource(R.drawable.portada)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(resources.getColor(R.color.portada_fondo, theme))
+            isClickable = true
+        }
+        root.addView(splash, FrameLayout.LayoutParams(mp, mp))
+        splash.postDelayed({
+            splash.animate().alpha(0f).setDuration(400).withEndAction { root.removeView(splash) }.start()
+        }, 1400)
     }
 
     @Suppress("DEPRECATION")
@@ -143,17 +164,30 @@ class MainActivity : Activity() {
         if (hasFocus) immersive()
     }
 
-    override fun onDestroy() { hid.stop(); super.onDestroy() }
+    override fun onDestroy() {
+        HidHolder.onStatus = null
+        sensorMgr?.unregisterListener(gyroListener)
+        super.onDestroy()
+    }
 
     private fun ensurePerm() {
-        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_ADVERTISE), 1)
-        else hid.start()
+        val need = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 31) {
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) need.add(Manifest.permission.BLUETOOTH_CONNECT)
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) need.add(Manifest.permission.BLUETOOTH_ADVERTISE)
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            need.add(Manifest.permission.POST_NOTIFICATIONS)
+        if (need.isNotEmpty()) requestPermissions(need.toTypedArray(), 1) else iniciarServicio()
     }
 
     override fun onRequestPermissionsResult(r: Int, p: Array<out String>, g: IntArray) {
-        if (g.isNotEmpty() && g.all { it == PackageManager.PERMISSION_GRANTED }) hid.start()
+        if (Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) iniciarServicio()
         else status.text = "Falta el permiso de Bluetooth"
+    }
+
+    private fun iniciarServicio() {
+        startForegroundService(Intent(this, KeepAliveService::class.java))
     }
 
     private fun show(m: Int) {
@@ -169,21 +203,65 @@ class MainActivity : Activity() {
         if (pad.edit) toast("Arrastra los botones. Toca uno para cambiar su tamaño.")
     }
 
+    // ---------------- Giroscopio ----------------
+    private val gyroListener = object : SensorEventListener {
+        override fun onSensorChanged(e: SensorEvent) {
+            @Suppress("DEPRECATION") val rot = windowManager.defaultDisplay.rotation
+            val wx = e.values[0]
+            val wy = e.values[1]
+            val right: Float
+            val up: Float
+            when (rot) {
+                Surface.ROTATION_90 -> { right = wy; up = -wx }
+                Surface.ROTATION_270 -> { right = -wy; up = wx }
+                Surface.ROTATION_180 -> { right = -wx; up = -wy }
+                else -> { right = wx; up = wy }
+            }
+            val k = prefs.getInt("gyro", 100) / 100f / 3f
+            val inv = if (prefs.getBoolean("gyroinv", false)) -1f else 1f
+            pad.setGyro(-up * k, right * k * inv)
+        }
+
+        override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+    }
+
+    private fun setGyro(on: Boolean) {
+        val sm = sensorMgr
+        sm?.unregisterListener(gyroListener)
+        var activo = on
+        if (on) {
+            val s = sm?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            if (s == null) { toast("Este teléfono no tiene giroscopio"); activo = false }
+            else sm.registerListener(gyroListener, s, SensorManager.SENSOR_DELAY_GAME)
+        }
+        pad.gyroOn = activo
+        pad.setGyro(0f, 0f)
+        prefs.edit().putBoolean("gyro_on", activo).apply()
+        pad.invalidate()
+    }
+
     private fun menu() {
         val consola = Templates.names.first { it.first == cur }.second
         val items = arrayOf(
             "Mando", "Ratón", "Teclado", "Consola: $consola",
             "Mis perfiles" + (activo?.let { " ($it)" } ?: ""),
+            "Giroscopio: " + if (pad.gyroOn) "activado" else "desactivado",
             "Sensibilidad y ajustes",
             if (pad.edit) "Terminar de editar" else "Editar botones",
-            "Hacerse visible para emparejar", "Conectar a un equipo"
+            "Hacerse visible para emparejar", "Conectar a un equipo",
+            "Batería: mantener conexión en segundo plano",
+            "Salir y desconectar"
         )
         AlertDialog.Builder(this).setTitle(status.text.toString()).setItems(items) { _, i ->
             when (i) {
                 0 -> show(0); 1 -> show(1); 2 -> show(2)
-                3 -> profileDialog(); 4 -> perfilesDialog(); 5 -> settings()
-                6 -> { show(0); toggleEdit() }
-                7 -> visible(); 8 -> connectDialog()
+                3 -> profileDialog(); 4 -> perfilesDialog()
+                5 -> setGyro(!pad.gyroOn)
+                6 -> settings()
+                7 -> { show(0); toggleEdit() }
+                8 -> visible(); 9 -> connectDialog()
+                10 -> startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                11 -> { stopService(Intent(this, KeepAliveService::class.java)); finish() }
             }
         }.show()
     }
@@ -276,17 +354,17 @@ class MainActivity : Activity() {
     }
 
     private fun connectDialog() {
-        val l = hid.bonded
+        val l = hid?.bonded ?: emptyList()
         if (l.isEmpty()) { toast("Primero empareja el otro equipo desde los ajustes de Bluetooth, o pulsa Visible y búscalo desde él."); return }
         val names = l.map { it.name ?: it.address }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Conectar a…").setItems(names) { _, i -> hid.connect(l[i]) }.show()
+        AlertDialog.Builder(this).setTitle("Conectar a…").setItems(names) { _, i -> hid?.connect(l[i]) }.show()
     }
 
     private fun sendMouse(bt: Int, dx: Int, dy: Int, w: Int) {
         var x = dx; var y = dy; var ww = w
         do {
             val cx = x.coerceIn(-127, 127); val cy = y.coerceIn(-127, 127); val cw = ww.coerceIn(-127, 127)
-            hid.send(2, byteArrayOf(bt.toByte(), cx.toByte(), cy.toByte(), cw.toByte()))
+            hid?.send(2, byteArrayOf(bt.toByte(), cx.toByte(), cy.toByte(), cw.toByte()))
             x -= cx; y -= cy; ww -= cw
         } while (x != 0 || y != 0 || ww != 0)
     }
@@ -321,6 +399,12 @@ class MainActivity : Activity() {
         seek("Zona muerta de palancas", "dead", 8, 0, 30)
         seek("Velocidad del ratón", "mouse", 150, 50, 400)
         seek("Velocidad de desplazamiento", "scroll", 100, 30, 300)
+        seek("Sensibilidad del giroscopio", "gyro", 100, 30, 300)
+        box.addView(Switch(this).apply {
+            text = "Invertir giro vertical"
+            isChecked = prefs.getBoolean("gyroinv", false)
+            setOnCheckedChangeListener { _, v -> prefs.edit().putBoolean("gyroinv", v).apply() }
+        })
         box.addView(Switch(this).apply {
             text = "Orden de botones para PC"
             isChecked = prefs.getBoolean("pcmode", false)
@@ -368,7 +452,7 @@ class MainActivity : Activity() {
         val r = ByteArray(8)
         r[0] = mods.toByte()
         keysDown.take(6).forEachIndexed { i, k -> r[2 + i] = k.toByte() }
-        hid.send(3, r)
+        hid?.send(3, r)
     }
 
     private fun buildKeyboard(): LinearLayout {

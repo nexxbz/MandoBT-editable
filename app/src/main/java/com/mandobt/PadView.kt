@@ -20,6 +20,17 @@ class PadView(ctx: Context) : View(ctx) {
     var dead = .08f
     // false = orden estándar de Android y Linux; true = orden genérico para PC
     var pcMode = false
+    var gyroOn = false
+    var onToggleGyro: (() -> Unit)? = null
+    private var gx = 0f
+    private var gy = 0f
+
+    /** El giroscopio mueve la palanca derecha (apuntar). Valores de -1 a 1. */
+    fun setGyro(x: Float, y: Float) {
+        gx = if (abs(x) < .02f) 0f else x
+        gy = if (abs(y) < .02f) 0f else y
+        sendReport()
+    }
     var onReport: ((ByteArray) -> Unit)? = null
 
     private val down = HashMap<Int, Ctl>()
@@ -57,7 +68,7 @@ class PadView(ctx: Context) : View(ctx) {
             val cx = c.cx * width
             val cy = c.cy * height
             val r = rad(c)
-            val on = !edit && down.values.contains(c)
+            val on = !edit && (down.values.contains(c) || (c.kind == 'g' && gyroOn))
             p.style = Paint.Style.FILL
             p.color = if (on) 0xFF4C7DFF.toInt() else 0xFF2C3447.toInt()
             when (c.kind) {
@@ -90,7 +101,10 @@ class PadView(ctx: Context) : View(ctx) {
                 val c = ctls.lastOrNull { hit(it, e.getX(i), e.getY(i)) }
                 if (c != null) {
                     down[e.getPointerId(i)] = c
-                    if (edit) selected = c else performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    if (edit) selected = c else {
+                        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        if (c.kind == 'g') onToggleGyro?.invoke()
+                    }
                 } else if (edit) selected = null
             }
             MotionEvent.ACTION_MOVE -> for (i in 0 until e.pointerCount) {
@@ -141,6 +155,10 @@ class PadView(ctx: Context) : View(ctx) {
                     ax[c.id * 2 + 1] = (c.vy * k * 127).roundToInt().coerceIn(-127, 127)
                 }
             }
+        }
+        if (!edit && gyroOn) {
+            ax[2] = (ax[2] + gx * 127).roundToInt().coerceIn(-127, 127)
+            ax[3] = (ax[3] + gy * 127).roundToInt().coerceIn(-127, 127)
         }
         val hat = when (mask) { 1 -> 1; 3 -> 2; 2 -> 3; 6 -> 4; 4 -> 5; 12 -> 6; 8 -> 7; 9 -> 8; else -> 0 }
         val r = byteArrayOf(b.toByte(), (b shr 8).toByte(), hat.toByte(),
