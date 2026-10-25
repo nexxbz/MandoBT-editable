@@ -32,3 +32,9 @@ para una PC u otro teléfono. No hay que instalar nada en el equipo que recibe.
 Sube el contenido de esta carpeta a un repositorio nuevo de GitHub. La compilación
 empieza sola (pestaña Actions) y la APK se descarga desde el resultado, en
 "Artifacts > MandoBT-apk". Los pasos detallados están en la respuesta de la conversación.
+
+## Menú
+La app abre a pantalla completa. El botón de tres rayas (arriba al centro) abre el menú:
+modo (Mando, Ratón, Teclado), consola, sensibilidad y ajustes, editar botones y conexión.
+Si ya habías guardado una distribución antes de esta versión, usa Editar > Restablecer
+para ver la nueva disposición.
