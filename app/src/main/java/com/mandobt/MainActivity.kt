@@ -219,7 +219,7 @@ class MainActivity : Activity() {
             }
             val k = prefs.getInt("gyro", 100) / 100f / 3f
             val inv = if (prefs.getBoolean("gyroinv", false)) -1f else 1f
-            pad.setGyro(-up * k, right * k * inv)
+            pad.setGyro(up * k, right * k * inv)
         }
 
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
