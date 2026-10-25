@@ -18,11 +18,18 @@ class PadView(ctx: Context) : View(ctx) {
     var selected: Ctl? = null
     var gain = 1f
     var dead = .08f
+    // false = orden estándar de Android y Linux; true = orden genérico para PC
+    var pcMode = false
     var onReport: ((ByteArray) -> Unit)? = null
 
     private val down = HashMap<Int, Ctl>()
     private var lastRep = ByteArray(7)
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    // id del botón en la pantalla -> bit del reporte HID
+    private val androidMap = intArrayOf(0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 12)
+    private val pcMap = intArrayOf(0, 1, 2, 3, 4, 5, 11, 12, 6, 7, 8, 9, 10)
+    private fun bitOf(id: Int) = (if (pcMode) pcMap else androidMap)[id]
 
     private fun rad(c: Ctl) = c.size * height
 
@@ -118,7 +125,7 @@ class PadView(ctx: Context) : View(ctx) {
         var mask = 0
         val ax = IntArray(4)
         if (!edit) for (c in down.values) when (c.kind) {
-            'b', 'r' -> b = b or (1 shl c.id)
+            'b', 'r' -> b = b or (1 shl bitOf(c.id))
             'd' -> mask = mask or c.id
             's' -> {
                 val m = hypot(c.vx, c.vy)

@@ -205,6 +205,7 @@ class MainActivity : Activity() {
     private fun applyPrefs() {
         pad.gain = prefs.getInt("gain", 100) / 100f
         pad.dead = prefs.getInt("dead", 8) / 100f
+        pad.pcMode = prefs.getBoolean("pcmode", false)
         touch.speed = prefs.getInt("mouse", 150) / 100f
         touch.scroll = .05f * prefs.getInt("scroll", 100) / 100f
     }
@@ -229,6 +230,16 @@ class MainActivity : Activity() {
         seek("Zona muerta de palancas", "dead", 8, 0, 30)
         seek("Velocidad del ratón", "mouse", 150, 50, 400)
         seek("Velocidad de desplazamiento", "scroll", 100, 30, 300)
+        box.addView(Switch(this).apply {
+            text = "Orden de botones para PC"
+            isChecked = prefs.getBoolean("pcmode", false)
+            setPadding(0, dp(12), 0, 0)
+            setOnCheckedChangeListener { _, v -> prefs.edit().putBoolean("pcmode", v).apply(); applyPrefs() }
+        })
+        box.addView(TextView(this).apply {
+            text = "Apagado: orden estándar de Android y Linux (otro teléfono). Encendido: orden genérico para Windows."
+            textSize = 12f
+        })
         AlertDialog.Builder(this).setTitle("Ajustes").setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("Cerrar", null).show()
     }
