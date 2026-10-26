@@ -16,7 +16,8 @@ class PadView(ctx: Context) : View(ctx) {
     var edit = false
         private set
     var selected: Ctl? = null
-    var gain = 1f
+    var gain = 1f          // sensibilidad de la palanca izquierda (caminar)
+    var gainRight = 1f     // sensibilidad de la palanca derecha (cámara)
     var dead = .08f
     // false = orden estándar de Android y Linux; true = orden genérico para PC
     var pcMode = false
@@ -153,7 +154,8 @@ class PadView(ctx: Context) : View(ctx) {
             's' -> {
                 val m = hypot(c.vx, c.vy)
                 if (m > dead) {
-                    val k = (((m - dead) / (1f - dead)) * gain).coerceAtMost(1f) / m
+                    val g = if (c.id == 1) gainRight else gain
+                    val k = (((m - dead) / (1f - dead)) * g).coerceAtMost(1f) / m
                     ax[c.id * 2] = (c.vx * k * 127).roundToInt().coerceIn(-127, 127)
                     ax[c.id * 2 + 1] = (c.vy * k * 127).roundToInt().coerceIn(-127, 127)
                 }

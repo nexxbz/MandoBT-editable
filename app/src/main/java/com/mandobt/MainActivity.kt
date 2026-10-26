@@ -391,6 +391,7 @@ class MainActivity : Activity() {
 
     private fun applyPrefs() {
         pad.gain = prefs.getInt("gain", 100) / 100f
+        pad.gainRight = prefs.getInt("gain_r", prefs.getInt("gain", 100)) / 100f
         pad.dead = prefs.getInt("dead", 8) / 100f
         pad.pcMode = prefs.getBoolean("pcmode", false)
         touch.speed = prefs.getInt("mouse", 150) / 100f
@@ -415,7 +416,8 @@ class MainActivity : Activity() {
             })
             box.addView(tv); box.addView(sb)
         }
-        seek("Sensibilidad de palancas", "gain", 100, 50, 200)
+        seek("Sensibilidad al caminar (palanca izquierda)", "gain", 100, 20, 200)
+        seek("Sensibilidad de la cámara (palanca derecha)", "gain_r", prefs.getInt("gain", 100), 20, 200)
         seek("Zona muerta de palancas", "dead", 8, 0, 30)
         seek("Velocidad del ratón", "mouse", 150, 50, 400)
         seek("Velocidad de desplazamiento", "scroll", 100, 30, 300)
