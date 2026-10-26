@@ -42,6 +42,8 @@ class PadView(ctx: Context) : View(ctx) {
     private val pcMap = intArrayOf(0, 1, 2, 3, 4, 5, 11, 12, 6, 7, 8, 9, 10)
     private fun bitOf(id: Int) = (if (pcMode) pcMap else androidMap)[id]
 
+    private val REACH = 0.6f
+
     private fun rad(c: Ctl) = c.size * height
 
     private fun hit(c: Ctl, x: Float, y: Float): Boolean {
@@ -126,8 +128,9 @@ class PadView(ctx: Context) : View(ctx) {
             c.cx = (x / width).coerceIn(.03f, .97f)
             c.cy = (y / height).coerceIn(.05f, .95f)
         } else if (c.kind == 's') {
-            var dx = (x - c.cx * width) / rad(c)
-            var dy = (y - c.cy * height) / rad(c)
+            // la palanca llega al máximo al recorrer el 60 % del círculo, no el 100 %
+            var dx = (x - c.cx * width) / (rad(c) * REACH)
+            var dy = (y - c.cy * height) / (rad(c) * REACH)
             val m = hypot(dx, dy)
             if (m > 1f) { dx /= m; dy /= m }
             c.vx = dx; c.vy = dy
