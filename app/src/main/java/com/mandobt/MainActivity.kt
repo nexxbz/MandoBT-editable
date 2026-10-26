@@ -371,13 +371,13 @@ class MainActivity : Activity() {
         b.show()
     }
 
+    /** Cierra la app por completo: corta la conexión, detiene el servicio y la quita de recientes. */
     private fun salir() {
-        if (hid?.connected == true) {
-            toast("La conexión sigue activa en segundo plano. Para cortarla, usa Desconectar en «Conectar a un equipo».")
-        } else {
-            stopService(Intent(this, KeepAliveService::class.java))
-        }
-        finish()
+        hid?.disconnect()
+        stopService(Intent(this, KeepAliveService::class.java))
+        HidHolder.hid?.stop()
+        HidHolder.hid = null
+        finishAndRemoveTask()
     }
 
     private fun sendMouse(bt: Int, dx: Int, dy: Int, w: Int) {
