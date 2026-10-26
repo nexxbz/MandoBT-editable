@@ -68,6 +68,13 @@ class HidController(private val ctx: Context, private val onStatus: (String) -> 
 
     fun connect(d: BluetoothDevice) { hid?.connect(d) }
 
+    val connected: Boolean get() = host != null
+
+    fun disconnect() {
+        val h = host ?: return
+        hid?.disconnect(h)
+    }
+
     fun send(id: Int, data: ByteArray) {
         val h = host ?: return
         hid?.sendReport(h, id, data)

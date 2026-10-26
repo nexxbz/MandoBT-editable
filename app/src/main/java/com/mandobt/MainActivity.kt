@@ -250,7 +250,7 @@ class MainActivity : Activity() {
             if (pad.edit) "Terminar de editar" else "Editar botones",
             "Hacerse visible para emparejar", "Conectar a un equipo",
             "Batería: mantener conexión en segundo plano",
-            "Salir y desconectar"
+            "Salir"
         )
         AlertDialog.Builder(this).setTitle(status.text.toString()).setItems(items) { _, i ->
             when (i) {
@@ -261,7 +261,7 @@ class MainActivity : Activity() {
                 7 -> { show(0); toggleEdit() }
                 8 -> visible(); 9 -> connectDialog()
                 10 -> startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                11 -> { stopService(Intent(this, KeepAliveService::class.java)); finish() }
+                11 -> salir()
             }
         }.show()
     }
@@ -355,9 +355,29 @@ class MainActivity : Activity() {
 
     private fun connectDialog() {
         val l = hid?.bonded ?: emptyList()
-        if (l.isEmpty()) { toast("Primero empareja el otro equipo desde los ajustes de Bluetooth, o pulsa Visible y búscalo desde él."); return }
-        val names = l.map { it.name ?: it.address }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Conectar a…").setItems(names) { _, i -> hid?.connect(l[i]) }.show()
+        val b = AlertDialog.Builder(this).setTitle("Conectar a PC o teléfono")
+        if (l.isEmpty()) {
+            b.setMessage("No hay equipos emparejados. Pulsa «Ajustes Bluetooth» para emparejar uno, o usa «Hacerse visible para emparejar» y búscalo desde el otro equipo.")
+        } else {
+            b.setItems(l.map { it.name ?: it.address }.toTypedArray()) { _, i -> hid?.connect(l[i]) }
+        }
+        b.setNeutralButton("Desconectar") { _, _ ->
+            if (hid?.connected == true) { hid?.disconnect(); toast("Desconectado") }
+            else toast("No hay ningún equipo conectado")
+        }
+        b.setPositiveButton("Ajustes Bluetooth") { _, _ ->
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        }
+        b.show()
+    }
+
+    private fun salir() {
+        if (hid?.connected == true) {
+            toast("La conexión sigue activa en segundo plano. Para cortarla, usa Desconectar en «Conectar a un equipo».")
+        } else {
+            stopService(Intent(this, KeepAliveService::class.java))
+        }
+        finish()
     }
 
     private fun sendMouse(bt: Int, dx: Int, dy: Int, w: Int) {
