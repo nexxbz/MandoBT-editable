@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DownloadManager
+import android.net.Uri
 import android.bluetooth.BluetoothAdapter
 import android.content.SharedPreferences
 import android.content.Intent
@@ -40,6 +42,8 @@ class MainActivity : Activity() {
     private lateinit var editBar: LinearLayout
     private var cur = "xbox"
     private var activo: String? = null
+    private var gyroK = 1f / 3f
+    private var gyroInvF = 1f
     private var mods = 0
     private val keysDown = mutableListOf<Int>()
     private val modBtns = mutableMapOf<Int, Button>()
@@ -129,6 +133,7 @@ class MainActivity : Activity() {
         immersive()
         applyPrefs()
         ensurePerm()
+        buscarActualizacion(false)
         if (prefs.getBoolean("gyro_on", false)) setGyro(true)
 
         val splash = ImageView(this).apply {
@@ -217,8 +222,8 @@ class MainActivity : Activity() {
                 Surface.ROTATION_180 -> { right = -wx; up = -wy }
                 else -> { right = wx; up = wy }
             }
-            val k = prefs.getInt("gyro", 100) / 100f / 3f
-            val inv = if (prefs.getBoolean("gyroinv", false)) -1f else 1f
+            val k = gyroK
+            val inv = gyroInvF
             pad.setGyro(up * k, right * k * inv)
         }
 
@@ -250,6 +255,7 @@ class MainActivity : Activity() {
             if (pad.edit) "Terminar de editar" else "Editar botones",
             "Hacerse visible para emparejar", "Conectar a un equipo",
             "Batería: mantener conexión en segundo plano",
+            "Actualizaciones",
             "Salir"
         )
         AlertDialog.Builder(this).setTitle(status.text.toString()).setItems(items) { _, i ->
@@ -261,7 +267,8 @@ class MainActivity : Activity() {
                 7 -> { show(0); toggleEdit() }
                 8 -> visible(); 9 -> connectDialog()
                 10 -> startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                11 -> salir()
+                11 -> actualizacionesDialog()
+                12 -> salir()
             }
         }.show()
     }
@@ -272,12 +279,49 @@ class MainActivity : Activity() {
         return MutableList(a.length()) { a.getString(it) }
     }
 
+    // ---------------- Sensibilidad por juego ----------------
+    // Si hay un perfil activo, las sensibilidades se guardan y se leen de ese perfil.
+    // Si no hay perfil, valen para todos los juegos.
+    private fun sensJson(n: String): org.json.JSONObject =
+        try { org.json.JSONObject(prefs.getString("pfs_$n", "{}") ?: "{}") } catch (_: Exception) { org.json.JSONObject() }
+
+    private fun sv(key: String, def: Int): Int {
+        val a = activo
+        if (a != null) { val j = sensJson(a); if (j.has(key)) return j.getInt(key) }
+        return prefs.getInt(key, def)
+    }
+
+    private fun svb(key: String): Boolean {
+        val a = activo
+        if (a != null) { val j = sensJson(a); if (j.has(key)) return j.getBoolean(key) }
+        return prefs.getBoolean(key, false)
+    }
+
+    private fun ss(key: String, v: Int) {
+        val a = activo
+        if (a != null) prefs.edit().putString("pfs_$a", sensJson(a).put(key, v).toString()).apply()
+        else prefs.edit().putInt(key, v).apply()
+    }
+
+    private fun ssb(key: String, v: Boolean) {
+        val a = activo
+        if (a != null) prefs.edit().putString("pfs_$a", sensJson(a).put(key, v).toString()).apply()
+        else prefs.edit().putBoolean(key, v).apply()
+    }
+
     private fun guardarPerfil(name: String) {
         val l = perfiles()
         if (name !in l) l.add(name)
+        if (!prefs.contains("pfs_$name")) {
+            val g = sv("gain", 100)
+            val j = org.json.JSONObject().put("gain", g).put("gain_r", sv("gain_r", g))
+                .put("dead", sv("dead", 8)).put("gyro", sv("gyro", 100)).put("gyroinv", svb("gyroinv"))
+            prefs.edit().putString("pfs_$name", j.toString()).apply()
+        }
         prefs.edit().putString("perfiles", org.json.JSONArray(l).toString())
             .putString("pf_$name", pad.toJson()).putString("perfil_activo", name).apply()
         activo = name
+        applyPrefs()
         toast("Perfil «$name» guardado")
     }
 
@@ -291,7 +335,7 @@ class MainActivity : Activity() {
 
     private fun borrarPerfil(name: String) {
         val l = perfiles(); l.remove(name)
-        prefs.edit().putString("perfiles", org.json.JSONArray(l).toString()).remove("pf_$name").apply()
+        prefs.edit().putString("perfiles", org.json.JSONArray(l).toString()).remove("pf_$name").remove("pfs_$name").apply()
         if (activo == name) { activo = null; prefs.edit().remove("perfil_activo").apply() }
     }
 
@@ -319,9 +363,9 @@ class MainActivity : Activity() {
                 AlertDialog.Builder(this).setTitle(n)
                     .setItems(arrayOf("Usar este perfil", "Guardar la distribución actual aquí", "Borrar perfil")) { _, j ->
                         when (j) {
-                            0 -> if (cargarPerfil(n)) show(0) else toast("No se pudo cargar")
+                            0 -> if (cargarPerfil(n)) { applyPrefs(); show(0) } else toast("No se pudo cargar")
                             1 -> guardarPerfil(n)
-                            2 -> { borrarPerfil(n); toast("Perfil borrado") }
+                            2 -> { borrarPerfil(n); applyPrefs(); toast("Perfil borrado") }
                         }
                     }.show()
             }
@@ -335,6 +379,7 @@ class MainActivity : Activity() {
             activo = null
             prefs.edit().remove("perfil_activo").apply()
             prefs.edit().putString("profile", cur).apply()
+            applyPrefs()
             show(0)
         }.show()
     }
@@ -359,7 +404,13 @@ class MainActivity : Activity() {
         if (l.isEmpty()) {
             b.setMessage("No hay equipos emparejados. Pulsa «Ajustes Bluetooth» para emparejar uno, o usa «Hacerse visible para emparejar» y búscalo desde el otro equipo.")
         } else {
-            b.setItems(l.map { it.name ?: it.address }.toTypedArray()) { _, i -> hid?.connect(l[i]) }
+            val conn = hid?.hostAddress
+            val names = l.map { (if (it.address == conn) "✓ " else "") + (it.name ?: it.address) }.toTypedArray()
+            b.setItems(names) { _, i ->
+                if (conn != null && conn != l[i].address)
+                    toast("Solo se puede estar conectado a un equipo a la vez. Cambiando de equipo…")
+                hid?.connect(l[i])
+            }
         }
         b.setNeutralButton("Desconectar") { _, _ ->
             if (hid?.connected == true) { hid?.disconnect(); toast("Desconectado") }
@@ -369,6 +420,73 @@ class MainActivity : Activity() {
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
         }
         b.show()
+    }
+
+    // ---------------- Actualizaciones desde GitHub ----------------
+    private fun versionActual(): Int =
+        try { packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt() } catch (_: Exception) { 0 }
+
+    private fun actualizacionesDialog() {
+        val repo = prefs.getString("repo", "") ?: ""
+        val items = arrayOf("Buscar actualización ahora", "Repositorio: " + if (repo.isBlank()) "sin configurar" else repo)
+        AlertDialog.Builder(this).setTitle("Actualizaciones (versión instalada: v${versionActual()})")
+            .setItems(items) { _, i ->
+                if (i == 0) buscarActualizacion(true) else pedirRepo { buscarActualizacion(true) }
+            }.show()
+    }
+
+    private fun pedirRepo(then: () -> Unit) {
+        val et = EditText(this).apply {
+            hint = "usuario/repositorio"; setSingleLine(true)
+            setText(prefs.getString("repo", ""))
+        }
+        AlertDialog.Builder(this).setTitle("Repositorio de GitHub")
+            .setMessage("Escribe el nombre de tu repositorio, por ejemplo: tuusuario/mando-bt")
+            .setView(et)
+            .setPositiveButton("Guardar") { _, _ ->
+                val r = et.text.toString().trim().removePrefix("https://github.com/").removePrefix("github.com/")
+                    .removeSuffix("/").removeSuffix(".git")
+                if (r.count { it == '/' } == 1 && !r.contains(' ')) {
+                    prefs.edit().putString("repo", r).apply(); then()
+                } else toast("Escríbelo así: usuario/repositorio")
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun buscarActualizacion(manual: Boolean) {
+        val repo = prefs.getString("repo", "") ?: ""
+        if (repo.isBlank()) { if (manual) pedirRepo { buscarActualizacion(true) }; return }
+        if (manual) toast("Buscando actualización…")
+        Thread {
+            val info = Updater.latest(repo)
+            runOnUiThread {
+                when {
+                    info == null -> if (manual) toast("No se pudo consultar GitHub. Revisa el repositorio (debe ser público) y la conexión.")
+                    info.num > versionActual() -> mostrarActualizacion(info)
+                    manual -> toast("Ya tienes la última versión (v${versionActual()}).")
+                }
+            }
+        }.start()
+    }
+
+    private fun mostrarActualizacion(i: Updater.Info) {
+        if (isFinishing) return
+        AlertDialog.Builder(this).setTitle("Hay una actualización")
+            .setMessage("Versión nueva: ${i.tag}. Tienes la v${versionActual()}.\n\nSe descargará la APK. Al terminar, toca la notificación para instalarla.")
+            .setPositiveButton("Descargar") { _, _ -> descargar(i.url) }
+            .setNegativeButton("Ahora no", null).show()
+    }
+
+    private fun descargar(url: String) {
+        try {
+            val r = DownloadManager.Request(Uri.parse(url)).setTitle("Mando BT").setDescription("Descargando actualización")
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, "MandoBT.apk")
+            getSystemService(DownloadManager::class.java).enqueue(r)
+            toast("Descargando… al terminar, toca la notificación para instalar.")
+        } catch (_: Exception) {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
     }
 
     /** Cierra la app por completo: corta la conexión, detiene el servicio y la quita de recientes. */
@@ -390,9 +508,11 @@ class MainActivity : Activity() {
     }
 
     private fun applyPrefs() {
-        pad.gain = prefs.getInt("gain", 100) / 100f
-        pad.gainRight = prefs.getInt("gain_r", prefs.getInt("gain", 100)) / 100f
-        pad.dead = prefs.getInt("dead", 8) / 100f
+        pad.gain = sv("gain", 100) / 100f
+        pad.gainRight = sv("gain_r", sv("gain", 100)) / 100f
+        pad.dead = sv("dead", 8) / 100f
+        gyroK = sv("gyro", 100) / 100f / 3f
+        gyroInvF = if (svb("gyroinv")) -1f else 1f
         pad.pcMode = prefs.getBoolean("pcmode", false)
         touch.speed = prefs.getInt("mouse", 150) / 100f
         touch.scroll = .05f * prefs.getInt("scroll", 100) / 100f
@@ -402,30 +522,39 @@ class MainActivity : Activity() {
 
     private fun settings() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(10), dp(20), 0) }
-        fun seek(label: String, key: String, def: Int, min: Int, max: Int) {
+        fun seek(label: String, key: String, def: Int, min: Int, max: Int, game: Boolean = true) {
             val tv = TextView(this); val sb = SeekBar(this)
-            tv.text = "$label: ${prefs.getInt(key, def)}%"
-            sb.max = max - min; sb.progress = prefs.getInt(key, def) - min
+            val v0 = if (game) sv(key, def) else prefs.getInt(key, def)
+            tv.text = "$label: $v0%"
+            sb.max = max - min; sb.progress = v0 - min
             sb.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: SeekBar?, p: Int, u: Boolean) {
                     tv.text = "$label: ${p + min}%"
-                    prefs.edit().putInt(key, p + min).apply(); applyPrefs()
+                    if (game) ss(key, p + min) else prefs.edit().putInt(key, p + min).apply()
+                    applyPrefs()
                 }
                 override fun onStartTrackingTouch(s: SeekBar?) {}
                 override fun onStopTrackingTouch(s: SeekBar?) {}
             })
             box.addView(tv); box.addView(sb)
         }
+        box.addView(TextView(this).apply {
+            val a = activo
+            text = if (a != null) "Perfil activo: «$a». La sensibilidad se guarda solo en este perfil."
+            else "No hay perfil activo: estos valores valen para todos los juegos. Para ajustar un juego, crea un perfil en Mis perfiles."
+            textSize = 12f
+            setPadding(0, 0, 0, dp(8))
+        })
         seek("Sensibilidad al caminar (palanca izquierda)", "gain", 100, 20, 200)
-        seek("Sensibilidad de la cámara (palanca derecha)", "gain_r", prefs.getInt("gain", 100), 20, 200)
+        seek("Sensibilidad de la cámara (palanca derecha)", "gain_r", sv("gain", 100), 20, 200)
         seek("Zona muerta de palancas", "dead", 8, 0, 30)
-        seek("Velocidad del ratón", "mouse", 150, 50, 400)
-        seek("Velocidad de desplazamiento", "scroll", 100, 30, 300)
+        seek("Velocidad del ratón", "mouse", 150, 50, 400, false)
+        seek("Velocidad de desplazamiento", "scroll", 100, 30, 300, false)
         seek("Sensibilidad del giroscopio", "gyro", 100, 30, 300)
         box.addView(Switch(this).apply {
             text = "Invertir giro vertical"
-            isChecked = prefs.getBoolean("gyroinv", false)
-            setOnCheckedChangeListener { _, v -> prefs.edit().putBoolean("gyroinv", v).apply() }
+            isChecked = svb("gyroinv")
+            setOnCheckedChangeListener { _, v -> ssb("gyroinv", v); applyPrefs() }
         })
         box.addView(Switch(this).apply {
             text = "Orden de botones para PC"
@@ -437,7 +566,7 @@ class MainActivity : Activity() {
             text = "Apagado: orden estándar de Android y Linux (otro teléfono). Encendido: orden genérico para Windows."
             textSize = 12f
         })
-        AlertDialog.Builder(this).setTitle("Ajustes").setView(ScrollView(this).apply { addView(box) })
+        AlertDialog.Builder(this).setTitle(activo?.let { "Ajustes de «$it»" } ?: "Ajustes generales").setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("Cerrar", null).show()
     }
 

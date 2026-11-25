@@ -3,6 +3,8 @@ package com.mandobt
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import java.util.concurrent.Executors
 
 /**
@@ -17,6 +19,7 @@ class HidController(private val ctx: Context, private val onStatus: (String) -> 
     private val adapter: BluetoothAdapter? = ctx.getSystemService(BluetoothManager::class.java)?.adapter
     private var hid: BluetoothHidDevice? = null
     private var host: BluetoothDevice? = null
+    private var pending: BluetoothDevice? = null   // equipo al que cambiar cuando se corte el actual
     private val exec = Executors.newSingleThreadExecutor()
 
     val bonded: List<BluetoothDevice> get() = adapter?.bondedDevices?.toList() ?: emptyList()
@@ -34,7 +37,9 @@ class HidController(private val ctx: Context, private val onStatus: (String) -> 
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     if (host == device) host = null
-                    onStatus("Desconectado")
+                    val p = pending
+                    if (p != null) { pending = null; hid?.connect(p) }
+                    else onStatus("Desconectado")
                 }
             }
         }
@@ -66,7 +71,24 @@ class HidController(private val ctx: Context, private val onStatus: (String) -> 
         hid = null
     }
 
-    fun connect(d: BluetoothDevice) { hid?.connect(d) }
+    /** Android solo mantiene un equipo conectado a la vez: se corta el actual y luego se conecta el nuevo. */
+    fun connect(d: BluetoothDevice) {
+        val current = host
+        if (current != null && current.address != d.address) {
+            pending = d
+            onStatus("Cambiando a " + (d.name ?: d.address) + "…")
+            hid?.disconnect(current)
+            // por si el sistema tarda en avisar de la desconexión
+            Handler(Looper.getMainLooper()).postDelayed({
+                val p = pending
+                if (p != null) { pending = null; hid?.connect(p) }
+            }, 3000)
+        } else if (current == null) {
+            hid?.connect(d)
+        }
+    }
+
+    val hostAddress: String? get() = host?.address
 
     val connected: Boolean get() = host != null
 

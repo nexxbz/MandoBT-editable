@@ -41,7 +41,18 @@ class PadView(ctx: Context) : View(ctx) {
     // id del botón en la pantalla -> bit del reporte HID
     private val androidMap = intArrayOf(0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14, 12)
     private val pcMap = intArrayOf(0, 1, 2, 3, 4, 5, 11, 12, 6, 7, 8, 9, 10)
-    private fun bitOf(id: Int) = (if (pcMode) pcMap else androidMap)[id]
+    // Los cuatro botones frontales se asignan por su letra (A, B, X, Y o ✕ ○ □ △), no por su posición.
+    // Así, en el perfil de Switch, el botón que dice "B" envía la B aunque esté abajo.
+    private fun logical(c: Ctl): Int {
+        if (c.kind == 'b' && c.id in 0..3) when (c.label) {
+            "A", "✕" -> return 0
+            "B", "○" -> return 1
+            "X", "□" -> return 2
+            "Y", "△" -> return 3
+        }
+        return c.id
+    }
+    private fun bitOf(c: Ctl) = (if (pcMode) pcMap else androidMap)[logical(c)]
 
     private val REACH = 0.6f
 
@@ -146,7 +157,7 @@ class PadView(ctx: Context) : View(ctx) {
         var brk = 0
         if (!edit) for (c in down.values) when (c.kind) {
             'b', 'r' -> {
-                b = b or (1 shl bitOf(c.id))
+                b = b or (1 shl bitOf(c))
                 if (c.id == 7) gas = 255
                 if (c.id == 6) brk = 255
             }
