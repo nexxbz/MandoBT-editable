@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Control Remoto</string>
+    <string name="accessibility_description">Permite que otro teléfono con esta app controle este dispositivo por wifi: botones de inicio y atrás, volumen, toques, deslizamientos y escritura de texto. Solo acepta órdenes de quien conozca el PIN.</string>
+</resources>
