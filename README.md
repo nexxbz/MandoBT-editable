@@ -1,48 +1,40 @@
-# Control Remoto (Android) — por wifi
+# Mando BT (versión con distribución editable)
 
-Controla otro teléfono Android desde el tuyo **por wifi**. La misma app va en los dos teléfonos:
-- **Teléfono controlado:** pantalla "Este teléfono" → activar el servicio en Accesibilidad. Muestra un PIN.
-- **Teléfono que controla:** la lista "Dispositivos" encuentra solo al otro teléfono en la wifi (o se agrega por IP),
-  pide el PIN la primera vez y abre el control.
+Convierte un teléfono Android 9 o superior en control, ratón y teclado Bluetooth
+para una PC u otro teléfono. No hay que instalar nada en el equipo que recibe.
 
-## Pantallas
-- **Dispositivos:** favoritos y teléfonos que tienen la app en tu wifi (solo esos). Menú ⋮ de cada uno: conectar,
-  favoritos, conexión automática (la etiqueta "Auto" solo sale en el que actives) y olvidar.
-- **Control:** se adapta al tamaño de la ventana (también en modo ventana). El ícono del mouse cambia la cruceta por el
-  panel táctil, en el mismo lugar. Teclado de texto con espacio, flechas, borrar e intro, teclado numérico y "Más botones".
-- **Ajustes:** modo de navegación por defecto, botones de volumen del teléfono, velocidad del puntero y del desplazamiento,
-  invertir desplazamiento, borrar el campo después de enviar, versión y buscar actualización.
+## Cómo generar la APK
+1. Instala Android Studio (Koala o superior) y ábrelo con "Open" sobre esta carpeta.
+2. Espera a que termine la sincronización de Gradle (descarga lo necesario).
+3. Menú Build > Build Bundle(s) / APK(s) > Build APK(s). El archivo queda en
+   app/build/outputs/apk/debug/app-debug.apk
+4. Para instalar por cable: activa Depuración USB en el teléfono (Ajustes > Opciones de
+   desarrollador) y pulsa Run en Android Studio, o usa `adb install app-debug.apk`.
 
-## Qué controla
-Inicio, atrás, recientes, notificaciones, volumen y mute, reproducir/pausar/adelantar/retroceder, captura de pantalla,
-brillo (con permiso), escribir texto y números.
-- **Encendido:** un solo botón; si la pantalla está encendida la apaga y si está apagada la enciende.
-- **Cruceta y OK:** en Android 13 o superior usan las teclas de dirección reales del sistema. En Android 12 o menor se
-  dibuja un recuadro sobre el elemento seleccionado, las flechas lo mueven al elemento más cercano en esa dirección
-  (y desplazan la lista al llegar al borde) y OK lo pulsa; si no se puede, toca en su centro.
-- **Panel táctil:** cursor en forma de flecha de ratón. Un toque = clic; deslizar = mover; mantener el dedo quieto y deslizar =
-  apretar y deslizar (arrastrar). Botones de abajo: izquierdo (mantenerlo apretado y deslizar en el panel = arrastrar),
-  central (clic) y derecho (mantener presionado = abrir las opciones, como al presionar la pantalla).
+## Uso
+1. Abre la app y concede el permiso de Bluetooth.
+2. Pulsa Visible, y en la PC u otro teléfono busca "Mando BT" y empareja. También
+   puedes emparejar desde los ajustes de ese equipo y luego pulsar Conectar en la app.
+3. Cambia entre Mando, Ratón y Teclado. Elige la consola en la lista (Xbox, PlayStation,
+   Switch, Genérico).
+4. Editar: arrastra cada botón, palanca o dirección de la cruceta a donde quieras,
+   toca uno para cambiar su tamaño y pulsa Guardar. Se guarda una distribución por consola.
+5. Ajustes: sensibilidad y zona muerta de las palancas, velocidad del ratón y del desplazamiento.
 
-## Requisitos
-- Android 9 o superior, ambos teléfonos en la misma wifi.
-- En el teléfono controlado: activar el servicio en Accesibilidad. Si Android dice "Configuración restringida",
-  abre Info de la app → menú ⋮ → "Permitir ajustes restringidos".
-- Para brillo: permitir "Modificar ajustes del sistema" (botón en "Este teléfono").
+## Notas
+- El equipo que recibe lo ve como un gamepad HID genérico. Muchos juegos de PC que solo
+  aceptan XInput necesitan un traductor como Steam Input.
+- PlayStation verifica la autenticidad del control, así que no aceptará esta emulación.
+- Si el teléfono no admite el modo HID (algunos fabricantes lo bloquean), la app lo avisa.
+- El modo USB (controlar por cable) no está incluido en esta versión.
 
-## Seguridad
-El tráfico va por tu wifi sin cifrar, protegido por un PIN de 6 dígitos. Úsalo en redes de confianza.
+## Compilar la APK en GitHub (sin Android Studio)
+Sube el contenido de esta carpeta a un repositorio nuevo de GitHub. La compilación
+empieza sola (pestaña Actions) y la APK se descarga desde el resultado, en
+"Artifacts > MandoBT-apk". Los pasos detallados están en la respuesta de la conversación.
 
-## Actualizaciones dentro de la app
-Cada push a GitHub compila y publica un **Release** con el APK. Al abrir la app, revisa el último Release y, si es más
-nuevo, pregunta **"¿Desea descargar esta actualización?"** con **Aceptar** o **Rechazar**.
-El repositorio debe ser **público**. Ajustes (engrane) → "Buscar actualización" explica por qué no hay una si falla.
-Todos los builds se firman con la misma llave (`app/debug.keystore`) para poder actualizar encima.
-
-## Limitaciones
-- Las TVs y otros dispositivos sin esta app no se controlan en esta versión (la TV por wifi sería el siguiente paso).
-- Las flechas no mueven el foco como un control de TV: deslizan la pantalla.
-- Tocar en pantalla y escribir dependen de lo que permita cada app (algunas bloquean la accesibilidad).
-
-## Compilar
-Sube el proyecto a GitHub: *Actions* compila y el APK queda en *Releases*. O ábrelo con Android Studio.
+## Menú
+La app abre a pantalla completa. El botón de tres rayas (arriba al centro) abre el menú:
+modo (Mando, Ratón, Teclado), consola, sensibilidad y ajustes, editar botones y conexión.
+Si ya habías guardado una distribución antes de esta versión, usa Editar > Restablecer
+para ver la nueva disposición.
